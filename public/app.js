@@ -2040,6 +2040,128 @@ function renderParallelSubagentHtml(m) {
 //#endregion
 
 //#region AGENTS
+function agentTeamNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString('en-US') : String(value);
+}
+
+function agentTeamTruncate(text, max = 600) {
+  if (text === null || text === undefined) return '';
+  const s = String(text).trim();
+  return s.length > max ? `${s.slice(0, max - 3)}...` : s;
+}
+
+function agentTeamUsageText(usage) {
+  if (!usage || typeof usage !== 'object') return '';
+  const parts = [];
+  if (usage.turns != null) parts.push(`${agentTeamNumber(usage.turns)} turns`);
+  const input = Number(usage.inputTokens) || 0;
+  const output = Number(usage.outputTokens) || 0;
+  parts.push(`${agentTeamNumber(input + output)} tok`);
+  if (usage.costUsd != null) {
+    const cost = Number(usage.costUsd);
+    parts.push(Number.isFinite(cost) ? `$${cost.toFixed(4)}` : String(usage.costUsd));
+  }
+  if (usage.contextTokens != null) {
+    let ctx = `ctx ${agentTeamNumber(usage.contextTokens)}`;
+    if (usage.contextWindow != null) ctx += `/${agentTeamNumber(usage.contextWindow)}`;
+    parts.push(ctx);
+  }
+  return parts.join(' · ');
+}
+
+function agentTeamScopeText(scope) {
+  if (!scope) return '';
+  if (typeof scope === 'string') return scope;
+  if (Array.isArray(scope)) return scope.join(', ');
+  if (Array.isArray(scope.roots)) return scope.roots.join(', ');
+  try {
+    const s = JSON.stringify(scope);
+    return s.length > 400 ? `${s.slice(0, 397)}...` : s;
+  } catch {
+    return '';
+  }
+}
+
+function agentTeamPromptText(agent) {
+  const parts = [];
+  if (agent._taskTitle) parts.push(`Task: ${agent._taskTitle}`);
+  if (agent._taskId) parts.push(`Task ID: ${agent._taskId}`);
+  if (agent._taskGoal) parts.push(`Goal:\n${agent._taskGoal}`);
+  const scope = agentTeamScopeText(agent._pathScope);
+  if (scope) parts.push(`Path scope: ${scope}`);
+  return parts.join('\n\n') || null;
+}
+
+function agentTeamListHtml(label, items, maxItems = 8) {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const shown = items.slice(0, maxItems);
+  const extra = items.length - shown.length;
+  const itemsHtml = shown.map((item) => `<li>${escapeHtml(String(item))}</li>`).join('');
+  const moreHtml = extra > 0 ? `<li class="agent-team-more">+${extra} more</li>` : '';
+  return `<div class="agent-team-section"><div class="agent-team-label">${escapeHtml(label)}</div><ul class="agent-team-list">${itemsHtml}${moreHtml}</ul></div>`;
+}
+
+function renderAgentTeamCard(agent) {
+  const taskHtml = agent._taskTitle
+    ? `<div class="agent-team-task" title="${escapeHtml(agent._taskTitle)}">${escapeHtml(agent._taskTitle)}</div>`
+    : '';
+  const usage = agentTeamUsageText(agent._usage);
+  const fileBits = [];
+  if (agent._readFiles?.length) fileBits.push(`${agent._readFiles.length} read`);
+  if (agent._changedFiles?.length) fileBits.push(`${agent._changedFiles.length} changed`);
+  const relay = agent._relayQuestions ? `${agent._relayQuestions} relay` : '';
+  const meta = [usage, fileBits.join(' / '), relay].filter(Boolean).join(' · ');
+  const metaHtml = meta ? `<div class="agent-team-muted">${escapeHtml(meta)}</div>` : '';
+  const prunedHtml = agent._pruned ? '<span class="agent-team-pruned">pruned</span>' : '';
+  if (!taskHtml && !metaHtml && !prunedHtml) return '';
+  return `<div class="agent-team-card">${prunedHtml}${taskHtml}${metaHtml}</div>`;
+}
+
+function renderAgentTeamSummary(agent) {
+  const summary = agent._summary || {};
+  const readFiles = agent._readFiles || summary.readFiles || [];
+  const changedFiles = agent._changedFiles || summary.changedFiles || [];
+  const risks = agent._risks || summary.risks || [];
+  const nextRecommendation = agent._nextRecommendation || summary.nextRecommendation || '';
+  const goal = agentTeamTruncate(agent._taskGoal, 800);
+  const statusText = agent._teamStatus || agent.status || 'unknown';
+  const field = (label, value) => {
+    if (!value) return '';
+    return `<div class="agent-team-field"><span class="agent-team-label">${escapeHtml(label)}</span><span class="agent-team-value">${escapeHtml(value)}</span></div>`;
+  };
+  const taskLabel = [agent._taskId, agent._taskTitle].filter(Boolean).join(' · ');
+  const usage = agentTeamUsageText(agent._usage);
+  const prunedHtml = agent._pruned ? '<span class="agent-team-pruned">pruned</span>' : '';
+  const goalHtml = goal
+    ? `<div class="agent-team-section"><div class="agent-team-label">Goal</div><div class="agent-team-text">${escapeHtml(goal)}</div></div>`
+    : '';
+  const usageHtml = usage ? `<div class="agent-team-usage">Usage: ${escapeHtml(usage)}</div>` : '';
+  const nextHtml = nextRecommendation
+    ? `<div class="agent-team-section"><div class="agent-team-label">Next step</div><div class="agent-team-text">${escapeHtml(nextRecommendation)}</div></div>`
+    : '';
+  return `<div class="agent-team-summary">
+    <div class="agent-team-summary-head">
+      <span class="agent-team-kicker">pi-agents-team</span>
+      <span class="agent-team-status-badge ${escapeHtml(agent.status)}">${escapeHtml(agent.status)}</span>
+      <span class="agent-team-status-raw">${escapeHtml(statusText)}</span>
+      ${prunedHtml}
+    </div>
+    <div class="agent-team-grid">
+      ${field('Worker', agent._workerId)}
+      ${field('Profile', agent.agentName)}
+      ${field('Task', taskLabel)}
+    </div>
+    ${goalHtml}
+    ${usageHtml}
+    ${agentTeamListHtml('Read files', readFiles)}
+    ${agentTeamListHtml('Changed files', changedFiles)}
+    ${agentTeamListHtml('Risks', risks)}
+    ${nextHtml}
+    <div class="agent-team-relay">Relay questions: ${agentTeamNumber(agent._relayQuestions || 0)}</div>
+  </div>`;
+}
+
 function renderAgentFooter() {
   const footer = document.getElementById('agent-footer');
   const content = document.getElementById('agent-footer-content');
@@ -2107,9 +2229,11 @@ function renderAgentFooter() {
           : '';
         const agentColor = resolveNamedColor(a.color);
         const colorStyle = agentColor ? ` style="border-left:3px solid ${agentColor.color}"` : '';
+        const teamCardHtml = a._team ? renderAgentTeamCard(a) : '';
         return `<div class="agent-card"${colorStyle} onclick="showAgentModal('${a.agentId}')">
           <div class="agent-type-row">${typeNs ? `<span class="agent-type-ns">${escapeHtml(typeNs)}</span>` : ''}<span class="agent-type-name">${escapeHtml(typeName)}</span>${nameBadgeHtml}</div>
           <div class="agent-status-row"><span class="agent-dot ${a.status}"></span><span class="agent-status">${statusText}</span></div>
+          ${teamCardHtml}
           ${msgHtml}
         </div>`;
       })
@@ -2238,11 +2362,15 @@ function showAgentModal(agentId) {
   if (stopped) chips.push(chip('stopped', stopped.toLocaleTimeString()));
 
   const agentMsg = currentMessages.find((m) => m.tool === 'Agent' && m.agentId === agentId);
+  const isTeam = !!agent._team;
 
   let html = `<div class="agent-chips">${chips.join('')}</div>`;
+  if (isTeam) html += renderAgentTeamSummary(agent);
 
-  const promptText = agentMsg?.agentPrompt || agent.prompt || null;
-  const rawResponse = agent.lastMessage || agentMsg?.agentLastMessage || null;
+  const promptText = isTeam ? agentTeamPromptText(agent) : (agentMsg?.agentPrompt || agent.prompt || null);
+  const rawResponse = isTeam
+    ? (agent._finalAnswer || agent._summary?.headline || null)
+    : (agent.lastMessage || agentMsg?.agentLastMessage || null);
   const responseText = rawResponse ? stripAnsi(rawResponse.trim()) : null;
   _agentModalPromptText = promptText;
   _agentModalResponseText = responseText;
@@ -2254,7 +2382,7 @@ function showAgentModal(agentId) {
   updateAgentModalPinState();
   autoSizeModal(modal.querySelector('.modal'), body);
   const dismissBtn = document.getElementById('agent-modal-dismiss-btn');
-  dismissBtn.style.display = agent.status === 'active' || agent.status === 'idle' ? '' : 'none';
+  dismissBtn.style.display = !agent._team && (agent.status === 'active' || agent.status === 'idle') ? '' : 'none';
   modal.classList.add('visible');
   const keyHandler = (e) => {
     if (e.key === 'Escape') {

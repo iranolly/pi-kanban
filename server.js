@@ -249,11 +249,11 @@ app.get('/api/sessions/:id/agents/:agentId/messages', async (req, res) => {
   if (!meta) return res.status(404).json({ messages: [], error: 'not found' });
   try {
     const rec = await parsers.findAgentRecord(meta, req.params.agentId);
-    if (!rec || !rec._sessionFile) {
+    if (!rec || (!rec._sessionFile && !rec._team)) {
       return res.json({ messages: [], agentId: req.params.agentId });
     }
     const limit = req.query.limit ? Number(req.query.limit) : 50;
-    const out = await parsers.buildMessages(rec._sessionFile, limit);
+    const out = rec._team ? parsers.buildTeamAgentMessages(rec) : await parsers.buildMessages(rec._sessionFile, limit);
     out.agentId = req.params.agentId;
     res.json(out);
   } catch (err) {
@@ -526,7 +526,16 @@ app.get('/api/sessions/:id/agents/:agentId/messages/stream', async (req, res) =>
   let meta;
   try { meta = await parsers.findSessionFileById(req.params.id); } catch { meta = null; }
   const rec = meta ? await parsers.findAgentRecord(meta, req.params.agentId).catch(() => null) : null;
-  if (!rec || !rec._sessionFile) return;
+  if (!rec || (!rec._sessionFile && !rec._team)) return;
+
+  if (rec._team) {
+    try {
+      const out = parsers.buildTeamAgentMessages(rec);
+      out.agentId = req.params.agentId;
+      res.write(`event: agent-log-update\ndata: ${JSON.stringify(out)}\n\n`);
+    } catch {}
+    return;
+  }
 
   // Subscribe before sending initial payload: any change during buildMessages
   // will fire notify -> broadcast and be picked up. Otherwise the gap between

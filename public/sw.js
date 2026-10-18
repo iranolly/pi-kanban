@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pi-kanban-v2';
+const CACHE_NAME = 'pi-kanban-v3';
 const PRECACHE_URLS = ['/', '/style.css', '/app.js'];
 
 let cachePromise = null;

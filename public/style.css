@@ -2548,6 +2548,136 @@ body::before {
   min-width: 0;
 }
 
+.agent-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border);
+  min-width: 0;
+}
+.agent-team-task {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-team-muted {
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-team-pruned {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--warning);
+}
+.agent-team-summary {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  font-size: 12px;
+}
+.agent-team-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.agent-team-kicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.agent-team-status-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.agent-team-status-badge.active {
+  color: var(--success);
+  border-color: var(--success);
+  background: var(--success-dim);
+}
+.agent-team-status-badge.cancelled {
+  color: var(--warning);
+  border-color: var(--warning);
+  background: var(--warning-dim);
+}
+.agent-team-status-badge.stopped {
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+.agent-team-status-raw {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.agent-team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 6px 14px;
+  margin-bottom: 4px;
+}
+.agent-team-field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.agent-team-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.agent-team-value,
+.agent-team-text {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.agent-team-text {
+  white-space: pre-wrap;
+}
+.agent-team-section {
+  margin-top: 8px;
+  min-width: 0;
+}
+.agent-team-list {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  color: var(--text-secondary);
+}
+.agent-team-list li {
+  margin: 1px 0;
+  overflow-wrap: anywhere;
+}
+.agent-team-list .agent-team-more {
+  list-style: none;
+  color: var(--text-muted);
+}
+.agent-team-usage,
+.agent-team-relay {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 /* #endregion */
 
 /* #region PERMISSION_PENDING */
