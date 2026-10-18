@@ -45,6 +45,28 @@ pi install npm:@juicesharp/rpiv-todo
 - [`@juicesharp/rpiv-todo`](https://www.npmjs.com/package/@juicesharp/rpiv-todo) — task tracking that pi-kanban displays as kanban columns.
 - [`@juicesharp/rpiv-ask-user-question`](https://www.npmjs.com/package/@juicesharp/rpiv-ask-user-question) — pi-kanban surfaces these as interactive Q&A cards.
 
+## 本 fork 的差异（iranolly）
+
+基于上游 v1.0.0，追加：
+
+- **pi-agents-team 接入**：Agents 视图不依赖 `pi-subagents`，直接解析父会话里的 `pi-agent-team/state` 记录与 `delegate_task` 工具结果，展示 worker 的 profile、状态、任务、用量、摘要与文件改动（agents-team 不落转录文件，详情来自摘要与最终结果）。
+- **任务板（kanban-ext）**：读写 `.pi/todos/*.md`，支持发布 / 拖拽改状态 / 认领。
+- **解析回归自测**：`npm run test:team-parser`。
+
+安装（替换 npm 版）：
+
+```sh
+pi remove npm:pi-kanban
+pi install git:github.com/iranolly/pi-kanban@main
+```
+
+同步上游：
+
+```sh
+git remote add upstream https://github.com/NikiforovAll/pi-kanban.git
+git fetch upstream && git merge upstream/main
+```
+
 ## Demo
 
 
