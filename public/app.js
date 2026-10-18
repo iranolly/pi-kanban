@@ -580,10 +580,14 @@ async function fetchProjectView(projectPath) {
     const r = agentResults[i];
     const sid = activeSessionIds[i];
     const agents = r.agents || (Array.isArray(r) ? r : []);
+    const sess = projectSessions.find((ps) => ps.id === sid);
+    const sourceLabel = sess?.name || sess?.slug || sid.slice(0, 8);
     for (const a of agents) {
-      if (a.agentId && !seen.has(a.agentId)) {
-        seen.add(a.agentId);
+      const dedupKey = `${sid}|${a.agentId}`;
+      if (a.agentId && !seen.has(dedupKey)) {
+        seen.add(dedupKey);
         a._sourceSessionId = sid;
+        a._sourceSessionLabel = sourceLabel;
         currentAgents.push(a);
       }
     }
@@ -616,10 +620,14 @@ async function refreshProjectAgents() {
     const r = agentResults[i];
     const sid = activeSessionIds[i];
     const agents = r.agents || (Array.isArray(r) ? r : []);
+    const sess = projectSessions.find((ps) => ps.id === sid);
+    const sourceLabel = sess?.name || sess?.slug || sid.slice(0, 8);
     for (const a of agents) {
-      if (a.agentId && !seen.has(a.agentId)) {
-        seen.add(a.agentId);
+      const dedupKey = `${sid}|${a.agentId}`;
+      if (a.agentId && !seen.has(dedupKey)) {
+        seen.add(dedupKey);
         a._sourceSessionId = sid;
+        a._sourceSessionLabel = sourceLabel;
         currentAgents.push(a);
       }
     }
@@ -664,19 +672,20 @@ async function openSessionWithBookmarks(sessionId) {
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: used in HTML
-async function viewAgentLog(agentId) {
-  let agent = findAgentById(agentId);
+async function viewAgentLog(agentId, sessionId = null) {
+  let agent = findAgentById(agentId, sessionId);
   if (!agent && currentSessionId) {
     await fetchAgents(currentSessionId);
-    agent = findAgentById(agentId);
+    agent = findAgentById(agentId, sessionId);
   }
   if (!agent) {
-    if (!currentSessionId) return;
-    agent = { agentId: agentId, type: 'Agent', _sourceSessionId: currentSessionId };
+    const fallbackSessionId = sessionId || currentSessionId;
+    if (!fallbackSessionId) return;
+    agent = { agentId: agentId, type: 'Agent', _sourceSessionId: fallbackSessionId };
   }
   const resolvedId = agent.agentId;
   const shortId = resolvedId.length > 8 ? resolvedId.slice(0, 8) : resolvedId;
-  const agentSessionId = agent._sourceSessionId || currentSessionId;
+  const agentSessionId = agent._sourceSessionId || sessionId || currentSessionId;
   agentLogMode = { agentId: resolvedId, sessionId: agentSessionId, agentType: agent.type || 'unknown' };
   resetMessageScrollState();
   closeAgentModal();
@@ -701,6 +710,8 @@ async function viewAgentLog(agentId) {
       maybeFollowLatest();
     } catch (_) {}
   });
+  // Team agents: the server pushes one snapshot and closes the stream. Treat
+  // that normal close as a no-op; EventSource auto-reconnects for the next one.
   agentLogSSE.onerror = () => {};
 }
 
@@ -2106,24 +2117,28 @@ function renderAgentTeamCard(agent) {
   const taskHtml = agent._taskTitle
     ? `<div class="agent-team-task" title="${escapeHtml(agent._taskTitle)}">${escapeHtml(agent._taskTitle)}</div>`
     : '';
+  const sourceHtml = agent._sourceSessionLabel
+    ? `<div class="agent-team-source">session ${escapeHtml(agent._sourceSessionLabel)}</div>`
+    : '';
   const usage = agentTeamUsageText(agent._usage);
   const fileBits = [];
-  if (agent._readFiles?.length) fileBits.push(`${agent._readFiles.length} read`);
-  if (agent._changedFiles?.length) fileBits.push(`${agent._changedFiles.length} changed`);
+  const summary = agent._summary || {};
+  if (summary.readFiles?.length) fileBits.push(`${summary.readFiles.length} read`);
+  if (summary.changedFiles?.length) fileBits.push(`${summary.changedFiles.length} changed`);
   const relay = agent._relayQuestions ? `${agent._relayQuestions} relay` : '';
   const meta = [usage, fileBits.join(' / '), relay].filter(Boolean).join(' · ');
   const metaHtml = meta ? `<div class="agent-team-muted">${escapeHtml(meta)}</div>` : '';
   const prunedHtml = agent._pruned ? '<span class="agent-team-pruned">pruned</span>' : '';
-  if (!taskHtml && !metaHtml && !prunedHtml) return '';
-  return `<div class="agent-team-card">${prunedHtml}${taskHtml}${metaHtml}</div>`;
+  if (!taskHtml && !metaHtml && !prunedHtml && !sourceHtml) return '';
+  return `<div class="agent-team-card">${prunedHtml}${sourceHtml}${taskHtml}${metaHtml}</div>`;
 }
 
 function renderAgentTeamSummary(agent) {
   const summary = agent._summary || {};
-  const readFiles = agent._readFiles || summary.readFiles || [];
-  const changedFiles = agent._changedFiles || summary.changedFiles || [];
-  const risks = agent._risks || summary.risks || [];
-  const nextRecommendation = agent._nextRecommendation || summary.nextRecommendation || '';
+  const readFiles = Array.isArray(summary.readFiles) ? summary.readFiles : [];
+  const changedFiles = Array.isArray(summary.changedFiles) ? summary.changedFiles : [];
+  const risks = Array.isArray(summary.risks) ? summary.risks : [];
+  const nextRecommendation = summary.nextRecommendation || '';
   const goal = agentTeamTruncate(agent._taskGoal, 800);
   const statusText = agent._teamStatus || agent.status || 'unknown';
   const field = (label, value) => {
@@ -2150,6 +2165,7 @@ function renderAgentTeamSummary(agent) {
     <div class="agent-team-grid">
       ${field('Worker', agent._workerId)}
       ${field('Profile', agent.agentName)}
+      ${field('Session', agent._sourceSessionLabel)}
       ${field('Task', taskLabel)}
     </div>
     ${goalHtml}
@@ -2230,7 +2246,8 @@ function renderAgentFooter() {
         const agentColor = resolveNamedColor(a.color);
         const colorStyle = agentColor ? ` style="border-left:3px solid ${agentColor.color}"` : '';
         const teamCardHtml = a._team ? renderAgentTeamCard(a) : '';
-        return `<div class="agent-card"${colorStyle} onclick="showAgentModal('${a.agentId}')">
+        const sourceSessionAttr = a._sourceSessionId ? `, '${escapeHtml(a._sourceSessionId)}'` : '';
+        return `<div class="agent-card"${colorStyle} onclick="showAgentModal('${a.agentId}'${sourceSessionAttr})">
           <div class="agent-type-row">${typeNs ? `<span class="agent-type-ns">${escapeHtml(typeNs)}</span>` : ''}<span class="agent-type-name">${escapeHtml(typeName)}</span>${nameBadgeHtml}</div>
           <div class="agent-status-row"><span class="agent-dot ${a.status}"></span><span class="agent-status">${statusText}</span></div>
           ${teamCardHtml}
@@ -2280,6 +2297,7 @@ async function copyAgentModalAll(btn) {
 }
 
 let currentAgentModalId = null;
+let currentAgentModalSessionId = null;
 
 function updateAgentModalPinState() {
   const btn = document.getElementById('agent-modal-pin-btn');
@@ -2308,21 +2326,26 @@ async function dismissAgent(agentId) {
   fetchAgents(currentSessionId);
 }
 
-function findAgentById(agentId) {
-  let agent = currentAgents.find((a) => a.agentId === agentId);
-  if (!agent) {
-    const atIdx = agentId.indexOf('@');
-    const memberName = atIdx > 0 ? agentId.substring(0, atIdx) : null;
-    if (memberName) agent = currentAgents.find((a) => a.type === memberName);
-  }
+function findAgentById(agentId, sessionId = null) {
+  const matches = (a) => {
+    if (a.agentId !== agentId) return false;
+    if (!sessionId) return true;
+    return (a._sourceSessionId || currentSessionId) === sessionId;
+  };
+  let agent = currentAgents.find(matches);
+  if (agent || sessionId) return agent || null;
+  const atIdx = agentId.indexOf('@');
+  const memberName = atIdx > 0 ? agentId.substring(0, atIdx) : null;
+  if (memberName) agent = currentAgents.find((a) => a.type === memberName);
   return agent || null;
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: used in HTML
-function showAgentModal(agentId) {
-  const agent = findAgentById(agentId);
+function showAgentModal(agentId, sessionId = null) {
+  const agent = findAgentById(agentId, sessionId);
   if (!agent) return;
   currentAgentModalId = agentId;
+  currentAgentModalSessionId = sessionId || agent._sourceSessionId || currentSessionId || null;
   const modal = document.getElementById('agent-modal');
   const title = document.getElementById('agent-modal-title');
   const body = document.getElementById('agent-modal-body');
@@ -2358,6 +2381,7 @@ function showAgentModal(agentId) {
       }),
     );
   }
+  if (agent._sourceSessionLabel) chips.push(chip('session', escapeHtml(agent._sourceSessionLabel)));
   if (started) chips.push(chip('started', started.toLocaleTimeString()));
   if (stopped) chips.push(chip('stopped', stopped.toLocaleTimeString()));
 
@@ -2397,6 +2421,7 @@ function showAgentModal(agentId) {
 function closeAgentModal() {
   resetModalFullscreen('agent-modal');
   currentAgentModalId = null;
+  currentAgentModalSessionId = null;
 }
 
 //#endregion

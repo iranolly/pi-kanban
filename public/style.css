@@ -2571,6 +2571,13 @@ body::before {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.agent-team-source {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .agent-team-pruned {
   font-size: 9px;
   font-weight: 600;

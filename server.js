@@ -238,6 +238,9 @@ app.get('/api/sessions/:id/agents', async (req, res) => {
     const waitingForUser = s.pendingAskUser
       ? { kind: 'question', toolName: 'AskUserQuestion', timestamp: s.pendingAskUser.timestamp }
       : null;
+    // no-cache keeps conditional requests working: Express still honors
+    // If-None-Match and replies 304 when the weak ETag matches.
+    res.set('Cache-Control', 'no-cache');
     res.json({ agents, waitingForUser });
   } catch (err) {
     res.status(500).json({ agents: [], error: String(err) });
@@ -534,6 +537,9 @@ app.get('/api/sessions/:id/agents/:agentId/messages/stream', async (req, res) =>
       out.agentId = req.params.agentId;
       res.write(`event: agent-log-update\ndata: ${JSON.stringify(out)}\n\n`);
     } catch {}
+    // Team agents have no watchable transcript. Push one snapshot and close;
+    // the browser's EventSource auto-reconnects and picks up the next snapshot.
+    res.end();
     return;
   }
 

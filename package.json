@@ -15,6 +15,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "release:local": "npm version \"$(git describe --tags --exact-match)\" --no-git-tag-version --allow-same-version && npm publish --access public && git checkout -- package.json package-lock.json",
+    "test:team-parser": "node scripts/test-team-parser.js",
     "typecheck:extensions": "tsc -p extensions/tsconfig.json --noEmit"
   },
   "devDependencies": {
