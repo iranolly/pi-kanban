@@ -176,6 +176,31 @@ check('pruned then newer terminal -> recovers (not pruned)', () => {
   expect(rec.updatedAt, ts(2500), 'updatedAt');
 });
 
+// 5b. prune-only (no snapshot/terminal) must not fall back to 1970
+check('prune-only timestamp is not 1970', () => {
+  const rec = apiFor([pruned('w1', { lastEventAt: 1900, usage: { turns: 3 } })], 'w1');
+  expect(rec.status, 'stopped', 'status');
+  expect(rec._pruned, true, '_pruned');
+  expect(rec.updatedAt, ts(1900), 'updatedAt');
+  expect(rec.stoppedAt, ts(1900), 'stoppedAt');
+  expect(rec.startedAt, null, 'startedAt');
+});
+
+// 5c. stale prune (earlier than a newer snapshot) must not stop the worker
+check('stale prune before newer running snapshot -> stays active', () => {
+  const rec = apiFor([pruned('w1', { lastEventAt: 1200 }), delegate('w1', { status: 'running', startedAt: 1000, lastEventAt: 2000 })], 'w1');
+  expect(rec.status, 'active', 'status');
+  expect(rec.stoppedAt, null, 'stoppedAt');
+  expect(rec._pruned, false, '_pruned');
+});
+
+check('stale prune after newer running snapshot -> stays active', () => {
+  const rec = apiFor([delegate('w1', { status: 'running', startedAt: 1000, lastEventAt: 2000 }), pruned('w1', { lastEventAt: 1200 })], 'w1');
+  expect(rec.status, 'active', 'status');
+  expect(rec.stoppedAt, null, 'stoppedAt');
+  expect(rec._pruned, false, '_pruned');
+});
+
 // 6. waiting_followup -> active
 check('waiting_followup -> active', () => {
   const rec = apiFor([delegate('w1', { status: 'waiting_followup', lastEventAt: 1600, relay: [{ id: 'q1' }, { id: 'q2' }] })], 'w1');

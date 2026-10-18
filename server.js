@@ -535,6 +535,7 @@ app.get('/api/sessions/:id/agents/:agentId/messages/stream', async (req, res) =>
     try {
       const out = parsers.buildTeamAgentMessages(rec);
       out.agentId = req.params.agentId;
+      res.write('retry: 10000\n\n');
       res.write(`event: agent-log-update\ndata: ${JSON.stringify(out)}\n\n`);
     } catch {}
     // Team agents have no watchable transcript. Push one snapshot and close;

@@ -2246,8 +2246,9 @@ function renderAgentFooter() {
         const agentColor = resolveNamedColor(a.color);
         const colorStyle = agentColor ? ` style="border-left:3px solid ${agentColor.color}"` : '';
         const teamCardHtml = a._team ? renderAgentTeamCard(a) : '';
-        const sourceSessionAttr = a._sourceSessionId ? `, '${escapeHtml(a._sourceSessionId)}'` : '';
-        return `<div class="agent-card"${colorStyle} onclick="showAgentModal('${a.agentId}'${sourceSessionAttr})">
+        const modalArgs = [a.agentId, a._sourceSessionId].filter(Boolean).map((v) => JSON.stringify(v)).join(', ');
+        const modalOnclick = escapeHtml(`showAgentModal(${modalArgs})`).replace(/"/g, '&quot;');
+        return `<div class="agent-card"${colorStyle} onclick="${modalOnclick}">
           <div class="agent-type-row">${typeNs ? `<span class="agent-type-ns">${escapeHtml(typeNs)}</span>` : ''}<span class="agent-type-name">${escapeHtml(typeName)}</span>${nameBadgeHtml}</div>
           <div class="agent-status-row"><span class="agent-dot ${a.status}"></span><span class="agent-status">${statusText}</span></div>
           ${teamCardHtml}
@@ -2340,6 +2341,29 @@ function findAgentById(agentId, sessionId = null) {
   return agent || null;
 }
 
+// Team agents' list payload omits the final answer. Fetch the synthetic messages
+// endpoint after the modal is visible and swap the full response text in.
+async function hydrateTeamAgentResponse(agentId, sessionId) {
+  try {
+    const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}/messages?limit=100`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    const assistants = messages.filter((m) => m && m.type === 'assistant' && typeof m.text === 'string' && m.text.trim());
+    if (!assistants.length) return;
+    // Prefer the final answer when present; the structured summary is a fallback.
+    const answer = assistants.find((m) => !m.text.startsWith('pi-agents-team worker summary')) || assistants[assistants.length - 1];
+    if (currentAgentModalId !== agentId || currentAgentModalSessionId !== sessionId) return;
+    const responseText = stripAnsi(answer.text);
+    _agentModalResponseText = responseText;
+    const panel = document.querySelector('#agent-modal-body .agent-tab-panel[data-tab-key="response"] .detail-desc');
+    if (panel) panel.innerHTML = renderJsonOrMarkdown(responseText);
+    const modalEl = document.querySelector('#agent-modal .modal');
+    const body = document.getElementById('agent-modal-body');
+    if (modalEl && body) autoSizeModal(modalEl, body);
+  } catch (_) {}
+}
+
 // biome-ignore lint/correctness/noUnusedVariables: used in HTML
 function showAgentModal(agentId, sessionId = null) {
   const agent = findAgentById(agentId, sessionId);
@@ -2416,6 +2440,10 @@ function showAgentModal(agentId, sessionId = null) {
     }
   };
   document.addEventListener('keydown', keyHandler);
+  if (isTeam && currentAgentModalSessionId && !agent._finalAnswer) {
+    // List payload omits the final answer; hydrate the Response tab without blocking the modal.
+    hydrateTeamAgentResponse(agentId, currentAgentModalSessionId);
+  }
 }
 
 function closeAgentModal() {
