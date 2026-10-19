@@ -1067,6 +1067,29 @@ body::before {
   color: #c44;
 }
 
+.task-todo-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.task-todo-btn {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.task-todo-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
 .task-card:hover {
   background: var(--bg-hover);
   border-color: var(--text-muted);

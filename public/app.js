@@ -541,6 +541,44 @@ async function toggleTodoClaim(taskId) {
 
 window.toggleTodoClaim = toggleTodoClaim;
 
+// Card-level .pi/todos actions: claim/release, complete/reopen (drag does the same for status).
+async function onTodoCardAction(e) {
+  const btn = e.currentTarget;
+  const taskId = btn.dataset.taskId;
+  const action = btn.dataset.todoAction;
+  const task = currentTasks.find((t) => t.id === taskId && t._todo);
+  if (!task) return;
+  const { project, id } = task._todo;
+  try {
+    let data;
+    if (action === 'claim' || action === 'release') {
+      const res = await fetch('/api/kanban-todos/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project, id, mode: task.owner ? 'release' : 'claim' }),
+      });
+      data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      showToast(task.owner ? 'Released' : 'Claimed', 'success');
+    } else {
+      const bucket = action === 'complete' ? 'completed' : 'pending';
+      const res = await fetch('/api/kanban-todos/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project, id, bucket }),
+      });
+      data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      showToast(bucket === 'completed' ? 'Completed' : 'Reopened', 'success');
+    }
+  } catch (err) {
+    showToast(`Action failed: ${err.message || err}`, 'error');
+  }
+  fetchTasks(currentSessionId).catch(() => {});
+}
+
+window.onTodoCardAction = onTodoCardAction;
+
 const _AGENT_COOLDOWN_MS = 3 * 60 * 1000;
 const _AGENT_STALE_MS = 5 * 60 * 1000; // kept for reference; no longer used for force-stopping
 const WAITING_TTL_MS = 30 * 60 * 1000;
@@ -2988,6 +3026,14 @@ function renderTaskCard(task) {
           ${task.status === 'in_progress' && task.activeForm ? `<div class="task-active">${escapeHtml(task.activeForm)}</div>` : ''}
           ${isBlocked ? `<div class="task-blocked">Waiting on ${task.blockedBy.map((id) => `#${id}`).join(', ')}</div>` : ''}
           ${task.description ? `<div class="task-desc">${escapeHtml(task.description.split('\n')[0])}</div>` : ''}
+          ${
+            isTodo
+              ? `<div class="task-todo-actions">
+            <button class="task-todo-btn" data-todo-action="${task.owner ? 'release' : 'claim'}" data-task-id="${task.id}" onclick="event.stopPropagation();onTodoCardAction(event)">${task.owner ? 'Release' : 'Claim'}</button>
+            <button class="task-todo-btn" data-todo-action="${task.status === 'completed' ? 'reopen' : 'complete'}" data-task-id="${task.id}" onclick="event.stopPropagation();onTodoCardAction(event)">${task.status === 'completed' ? 'Reopen' : 'Complete'}</button>
+          </div>`
+              : ''
+          }
         </div>
       `;
 }
