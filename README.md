@@ -50,7 +50,7 @@ pi install npm:@juicesharp/rpiv-todo
 基于上游 v1.0.0，追加：
 
 - **pi-agents-team 接入**：Agents 视图不依赖 `pi-subagents`，直接解析父会话里的 `pi-agent-team/state` 记录与 `delegate_task` 工具结果，展示 worker 的 profile、状态、任务、用量、摘要与文件改动（agents-team 不落转录文件，详情来自摘要与最终结果）。
-- **任务板（kanban-ext）**：读写 `.pi/todos/*.md`，支持发布 / 拖拽改状态 / 认领。
+- **任务板（kanban-ext）**：读写 `.pi/todos/*.md`。中心看板显示当前项目任务（拖拽改状态、详情里认领），抽屉是全部项目总览；发布改为开一次 pi-web 对话，由 pi 整理信息后用 todo 工具写入（`PI_WEB_URL` 可配，默认 `http://127.0.0.1:30141`）。
 - **解析回归自测**：`npm run test:team-parser`。
 
 安装（替换 npm 版）：

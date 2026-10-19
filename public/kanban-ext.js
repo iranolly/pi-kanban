@@ -211,24 +211,34 @@
     panel.appendChild(head);
 
     const create = el("div", "kex-create");
-    const titleInput = el("input");
-    titleInput.id = "kex-new-title";
-    titleInput.placeholder = "新任务标题：写完回车即发布，agent 会在 /todo list-all 里看到";
-    const tagInput = el("input");
-    tagInput.id = "kex-new-tags";
-    tagInput.placeholder = "标签（逗号分隔，可空）";
-    tagInput.style.flex = "0 0 180px";
-    const addBtn = el("button", "kex-btn primary", "发布任务");
-    const submit = async () => {
-      const title = titleInput.value.trim();
-      if (!title) { toast("标题不能为空", true); return; }
-      const tags = tagInput.value.split(",").map((s) => s.trim()).filter(Boolean);
-      const r = await api("/api/kanban-todos/create", { project: currentProject, title, tags });
-      if (r.ok) { titleInput.value = ""; tagInput.value = ""; toast("已发布 #" + r.id); load(); } else toast(r.error || "发布失败", true);
+    const hint = el(
+      "span",
+      "kex-meta",
+      "发布改为一次 pi 对话：pi 先帮你整理信息（标题 / 背景 / 验收 / 标签 / 认领），确认后由 pi 写入 .pi/todos。",
+    );
+    hint.style.flex = "1";
+    const addBtn = el("button", "kex-btn primary", "和 pi 对话发布");
+    addBtn.onclick = async () => {
+      if (!currentProject) { toast("请先选择项目", true); return; }
+      addBtn.disabled = true;
+      const oldLabel = addBtn.textContent;
+      addBtn.textContent = "正在打开…";
+      try {
+        const r = await api("/api/kanban-todos/ask-pi", { project: currentProject });
+        if (r.ok && r.url) {
+          window.open(r.url, "_blank", "noopener");
+          toast("已打开 pi 对话，整理完成后由 pi 发布");
+        } else {
+          toast(r.error || "无法启动 pi 对话", true);
+        }
+      } catch (err) {
+        toast("无法启动 pi 对话：" + (err && err.message ? err.message : err), true);
+      } finally {
+        addBtn.disabled = false;
+        addBtn.textContent = oldLabel;
+      }
     };
-    addBtn.onclick = submit;
-    titleInput.onkeydown = (e) => { if (e.key === "Enter") submit(); };
-    create.append(titleInput, tagInput, addBtn);
+    create.append(hint, addBtn);
     panel.appendChild(create);
 
     const cols = el("div", "kex-cols");

@@ -434,11 +434,22 @@ async function fetchTasks(sessionId) {
   try {
     viewMode = 'session';
     document.getElementById('message-toggle')?.style.removeProperty('display');
-    const res = await fetch(`/api/sessions/${sessionId}`);
+    // Centred board shows the current project's .pi/todos — same source as the task drawer.
+    const res = await fetch(`/api/kanban-todos/for-session?id=${encodeURIComponent(sessionId)}`);
 
     let newTasks;
     if (res.ok) {
-      newTasks = await res.json();
+      const data = await res.json();
+      newTasks = (data.todos || []).map((t) => ({
+        id: t.id,
+        subject: t.title,
+        status: t.bucket,
+        description: t.body || null,
+        owner: t.assigned_to_session || null,
+        tags: t.tags || [],
+        sessionId,
+        _todo: { project: t.project, id: t.id },
+      }));
     } else if (res.status === 404) {
       newTasks = [];
     } else {
@@ -486,6 +497,10 @@ async function fetchTasks(sessionId) {
 
 async function deleteTaskById(sessionId, taskId) {
   if (!sessionId || !taskId) return;
+  if (currentTasks.some((t) => t.id === taskId && t._todo)) {
+    showToast('Task-board items are managed by pi — edit them in the task board', 'error');
+    return;
+  }
   if (!confirm(`Delete task #${taskId}?`)) return;
   try {
     const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}`, {
@@ -503,6 +518,28 @@ async function deleteTaskById(sessionId, taskId) {
 }
 
 window.deleteTaskById = deleteTaskById;
+
+// Claim/release a .pi/todos task from the centred board; the drawer has the same action.
+async function toggleTodoClaim(taskId) {
+  const task = currentTasks.find((t) => t.id === taskId && t._todo);
+  if (!task) return;
+  const mode = task.owner ? 'release' : 'claim';
+  try {
+    const res = await fetch('/api/kanban-todos/assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: task._todo.project, id: task._todo.id, mode }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(mode === 'claim' ? 'Claimed' : 'Released', 'success');
+  } catch (err) {
+    showToast(`Action failed: ${err.message || err}`, 'error');
+  }
+  fetchTasks(currentSessionId).catch(() => {});
+}
+
+window.toggleTodoClaim = toggleTodoClaim;
 
 const _AGENT_COOLDOWN_MS = 3 * 60 * 1000;
 const _AGENT_STALE_MS = 5 * 60 * 1000; // kept for reference; no longer used for force-stopping
@@ -2912,6 +2949,7 @@ function renderProjectView() {
 
 function renderTaskCard(task) {
   const isBlocked = task.blockedBy && task.blockedBy.length > 0;
+  const isTodo = !!task._todo;
   const useSlug = viewMode === 'all' || viewMode === 'project';
   const taskId = useSlug ? `${(task._taskDir || task.sessionId || '')?.slice(0, 4)}-${task.id}` : task.id;
   const sessionLabel = viewMode === 'all' && task.sessionName ? task.sessionName : null;
@@ -2926,9 +2964,10 @@ function renderTaskCard(task) {
           data-session-id="${actualSessionId}"
           onclick="showTaskDetail('${task.id}', '${actualSessionId}')"
           class="task-card ${statusClass} ${isBlocked ? 'blocked' : ''}"
+          ${isTodo ? 'draggable="true" ondragstart="onCardDragStart(event)" ondragend="onCardDragEnd(event)"' : ''}
           aria-label="${escapeHtml(task.subject)} — ${task.status.replace('_', ' ')}">
           <div class="task-actions">
-            <button class="task-action-btn task-action-delete" title="Delete task" onclick="event.stopPropagation();deleteTaskById('${actualSessionId}','${task.id}')">×</button>
+            ${isTodo ? '' : `<button class="task-action-btn task-action-delete" title="Delete task" onclick="event.stopPropagation();deleteTaskById('${actualSessionId}','${task.id}')">×</button>`}
           </div>
           <div class="task-id">
             <span>#${taskId}</span>
@@ -3040,9 +3079,35 @@ function onColumnDragLeave(e) {
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: used in HTML
-function onColumnDrop(e) {
+async function onColumnDrop(e) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
+  let payload = null;
+  try {
+    payload = JSON.parse(e.dataTransfer.getData('text/plain') || 'null');
+  } catch {
+    payload = null;
+  }
+  const taskId = payload && payload.taskId;
+  if (!taskId) return;
+  const task = currentTasks.find((t) => t.id === taskId);
+  if (!task || !task._todo) return; // native tasks are read-only — pi owns the source of truth
+  const bucket = e.currentTarget.dataset.status;
+  if (!bucket || bucket === task.status) return;
+  const labels = { pending: 'Pending', in_progress: 'In Progress', completed: 'Completed' };
+  try {
+    const res = await fetch('/api/kanban-todos/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: task._todo.project, id: task._todo.id, bucket }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(`Moved to ${labels[bucket] || bucket}`, 'success');
+  } catch (err) {
+    showToast(`Move failed: ${err.message || err}`, 'error');
+  }
+  fetchTasks(currentSessionId).catch(() => {});
 }
 
 //#endregion
@@ -3394,6 +3459,7 @@ async function showTaskDetail(taskId, sessionId = null) {
           <div>${statusLabels[task.status] || ''}</div>
           ${task.owner ? `<div style="font-size: 13px; color: ${getOwnerColor(task.owner).color}; font-weight: 500;">${escapeHtml(task.owner)}</div>` : ''}
           ${isBlocked && task.status !== 'in_progress' ? '<div style="font-size: 10px; color: var(--warning);">Blocked</div>' : ''}
+          ${task._todo ? `<button class="icon-btn" style="width:auto;padding:0 10px;font-size:12px" onclick="toggleTodoClaim('${task.id}')">${task.owner ? 'Release' : 'Claim'}</button>` : ''}
         </div>
 
         <div class="detail-section">
@@ -4715,6 +4781,13 @@ function setupEventSource() {
         fetchTasks(currentSessionId).catch(() => {});
       }
 
+      if (data.type === 'todos:update') {
+        const cur = sessions.find((s) => s.id === currentSessionId);
+        if (cur && normalizePath(cur.cwd) === normalizePath(data.project)) {
+          fetchTasks(currentSessionId).catch(() => {});
+        }
+      }
+
     };
   }
 
@@ -4864,6 +4937,10 @@ function renderContextDetail(raw) {
 //#endregion
 
 //#region UTILS
+function normalizePath(p) {
+  return String(p || '').replace(/[\\/]+/g, '/').toLowerCase();
+}
+
 function maybeFollowLatest() {
   if (msgDetailFollowLatest && currentMessages.length) {
     showMsgDetail(currentMessages.length - 1);

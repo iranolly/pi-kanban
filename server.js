@@ -648,7 +648,7 @@ watcher.on('add', async (file) => {
 
 const http = require('node:http');
 const httpServer = http.createServer({ maxHeaderSize: 64 * 1024 }, app);
-require("./lib/kanban-todos.js").install(app); // KANBAN-EXT
+require("./lib/kanban-todos.js").install(app, { broadcast: sseSend }); // KANBAN-EXT
 const server = httpServer.listen(PORT, async () => {
   const url = `http://localhost:${PORT}`;
   console.log(`pi-kanban listening at ${url}`);
