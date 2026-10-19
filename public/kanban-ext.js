@@ -16,6 +16,7 @@
   const css = `
   .kex-fab{position:fixed;right:18px;bottom:18px;z-index:9999;background:#0284c7;color:#fff;border:none;border-radius:22px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35)}
   .kex-fab:hover{background:#0369a1}
+  .kex-open svg{width:16px;height:16px}
   .kex-drawer{position:fixed;inset:0;z-index:10000;background:rgba(3,7,18,.72);display:none}
   .kex-drawer.open{display:block}
   .kex-panel{position:absolute;inset:24px;background:var(--panel-bg,#111827);border:1px solid var(--border,#374151);border-radius:10px;display:flex;flex-direction:column;overflow:hidden}
@@ -165,12 +166,28 @@
     }
   }
 
+  function buildOpener() {
+    const actions = document.querySelector("#session-view .view-actions");
+    if (actions) {
+      const btn = el("button", "icon-btn kex-open");
+      btn.id = "kex-open";
+      btn.title = "任务板（.pi/todos）";
+      btn.setAttribute("aria-label", "任务板");
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M8 12h8M8 16h5"/></svg>`;
+      const anchor = actions.querySelector("#message-toggle");
+      actions.insertBefore(btn, anchor || actions.firstChild);
+      return btn;
+    }
+    // Fallback when the session header is absent (older layouts).
+    return el("button", "kex-fab", "任务板");
+  }
+
   function build() {
     const style = el("style");
     style.textContent = css;
     document.head.appendChild(style);
 
-    const fab = el("button", "kex-fab", "任务板");
+    const fab = buildOpener();
     fab.onclick = () => { drawer.classList.add("open"); load(); pollTimer = setInterval(() => load(true), 5000); };
 
     const drawer = el("div", "kex-drawer");
@@ -221,7 +238,8 @@
     drawer.appendChild(panel);
     const toastEl = el("div", "kex-toast");
     toastEl.id = "kex-toast";
-    document.body.append(fab, drawer, toastEl);
+    document.body.append(drawer, toastEl);
+    if (!fab.parentNode) document.body.appendChild(fab);
     drawer.addEventListener("click", (e) => {
       if (e.target === drawer) { drawer.classList.remove("open"); clearInterval(pollTimer); }
     });

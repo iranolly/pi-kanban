@@ -4731,28 +4731,15 @@ function setupEventSource() {
 
 const CONTEXT_COLORS = { green: '#5b9a6b', yellow: '#b8a63e', orange: '#c07840', red: '#b85555' };
 const COST_THRESHOLDS = { green: 0.5, yellow: 2, orange: 5 };
-const MODEL_THRESHOLDS = [
-  { match: /sonnet|haiku/i, yellow: 100000, orange: 130000, red: 150000 },
-  { match: /opus/i, yellow: 100000, orange: 200000, red: 700000 },
-];
-const DEFAULT_THRESHOLDS = { yellow: 100000, orange: 130000, red: 150000 };
+const CONTEXT_THRESHOLD_PCTS = { yellow: 50, orange: 65, red: 75 };
 
 //#endregion
 
 //#region CONTEXT_WINDOW
-function getModelThresholds(modelName) {
-  if (!modelName) return DEFAULT_THRESHOLDS;
-  for (const t of MODEL_THRESHOLDS) {
-    if (t.match.test(modelName)) return t;
-  }
-  return DEFAULT_THRESHOLDS;
-}
-
-function getContextColor(usedTokens, modelName) {
-  const t = getModelThresholds(modelName);
-  if (usedTokens < t.yellow) return CONTEXT_COLORS.green;
-  if (usedTokens < t.orange) return CONTEXT_COLORS.yellow;
-  if (usedTokens < t.red) return CONTEXT_COLORS.orange;
+function getContextColor(pct) {
+  if (pct < CONTEXT_THRESHOLD_PCTS.yellow) return CONTEXT_COLORS.green;
+  if (pct < CONTEXT_THRESHOLD_PCTS.orange) return CONTEXT_COLORS.yellow;
+  if (pct < CONTEXT_THRESHOLD_PCTS.red) return CONTEXT_COLORS.orange;
   return CONTEXT_COLORS.red;
 }
 
@@ -4786,7 +4773,11 @@ function getCtx(raw) {
   const pct = cw.used_percentage || 0;
   const model = raw.model || {};
   const modelName = model.display_name || model.id || '';
-  const thresholds = getModelThresholds(modelName);
+  const thresholds = {
+    yellow: (size * CONTEXT_THRESHOLD_PCTS.yellow) / 100,
+    orange: (size * CONTEXT_THRESHOLD_PCTS.orange) / 100,
+    red: (size * CONTEXT_THRESHOLD_PCTS.red) / 100,
+  };
   const usedTokens = size > 0 ? (pct / 100) * size : 0;
   const markers =
     size > 0
@@ -4811,7 +4802,7 @@ function getCtx(raw) {
 function renderContextBar(raw) {
   const ctx = getCtx(raw);
   if (!ctx) return '';
-  const color = getContextColor(ctx.usedTokens, ctx.modelName);
+  const color = getContextColor(ctx.pct);
   return `
         <div class="context-bar" style="display:block">
           <div class="context-bar-track">
@@ -4834,7 +4825,7 @@ function renderContextDetail(raw) {
   const ctx = getCtx(raw);
   if (!ctx) return '';
   const totalK = ctx.size / 1000;
-  const color = getContextColor(ctx.usedTokens, ctx.modelName);
+  const color = getContextColor(ctx.pct);
 
   const cw = raw.context_window || {};
   const usage = cw.current_usage || {};
